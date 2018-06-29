@@ -1,3 +1,7 @@
+// yaml work. require yaml modules after install
+yaml = require('js-yaml');
+fs   = require('fs');
+
 // database is let instead of const to allow us to modify it in test.js
 let database = {
   users: {},
@@ -6,6 +10,29 @@ let database = {
   comments: {},
   nextCommentId: 1,
 };
+// I think tbis is how to work with the yaml file, please give feedback if
+// this approach is correct
+function loadDatabase () {
+  try {
+    var database = yaml.safeLoad(fs.readFileSync('./database.yml', 'utf8'));
+  } catch (e) {
+    console.log(e);
+  }
+  return database;
+}
+
+function saveDatabase () {
+  if(database){
+    fs.writeFile('database.yml',
+      yaml.dump (database, {
+        'sortKeys': true        // sort object keys
+      }),
+      function (err) {
+        if (err) throw err;
+      }
+    );
+  }
+}
 
 const routes = {
   '/users': {
@@ -33,13 +60,14 @@ const routes = {
     'POST' : createComment
   },
   '/comments/:id' : {
-
+    'PUT' : updateComment,
+    'DELETE' : deleteComment
   },
   '/comments/:id/upvote' : {
-
+    'PUT': upvoteComment
   },
   '/comments/:id/downvote' : {
-
+    'PUT': downvoteComment
   },
 };
 
@@ -233,7 +261,7 @@ function downvoteArticle(url, request) {
 
   return response;
 }
-
+// reuseable
 function upvote(item, username) {
   if (item.downvotedBy.includes(username)) {
     item.downvotedBy.splice(item.downvotedBy.indexOf(username), 1);
@@ -243,7 +271,7 @@ function upvote(item, username) {
   }
   return item;
 }
-
+// reuseable
 function downvote(item, username) {
   if (item.upvotedBy.includes(username)) {
     item.upvotedBy.splice(item.upvotedBy.indexOf(username), 1);
@@ -254,10 +282,16 @@ function downvote(item, username) {
   return item;
 }
 
+// I started this project using a "postive first if" where I check to see if
+// so I used && and then on the first if did what I wanted. After the first
+//  function, I used the final else to do what I ultimately wanted with
+// || on the entrance of the if.
+// Is there a best practice?
 function createComment(url,request) {
+  // save request body to local var and init empty response
   const requestComment = request.body && request.body.comment;
   const response = {};
-
+  // check to see if multiple cases are fulfilled, if yes then create comment
   if(requestComment
     && requestComment.body
     && requestComment.username
@@ -273,6 +307,7 @@ function createComment(url,request) {
       };
       // adds comment, comment id to users and articles for reference
       database.comments[comment.id] = comment;
+      // not sure this is a legit way to find the user, but it works
       database.users[comment.username].commentIds.push(comment.id);
       database.articles[comment.articleId].commentIds.push(comment.id);
       // response
@@ -284,7 +319,102 @@ function createComment(url,request) {
   return response;
 }
 
+function updateComment(url,request) {
+  // parse out id from url
+  const id = Number(url.split('/').filter(segment => segment)[1]);
+  // save relevant comment to local reference
+  const savedComment = database.comments[id];
+  // save the request comment to a local
+  const updatedComment = request.body && request.body.comment;
+  const response = {};
+  // check for undefined or similar
+  if(!id || !request || !updatedComment || !updatedComment.body){
+    response.status = 400;
+  } else if (!savedComment) {
+    // if the saved comment requested doesnt exist
+    response.status = 404;
+  } else {
+    // everything went well so we update the database reference
+    savedComment.body = updatedComment.body;
+    // build methodResponse
+    response.body = {comment: savedComment};
+    response.status = 200;
+  }
+  return response;
+}
 
+function deleteComment(url,request) {
+  // parse out comment id from the url
+  const id = Number(url.split('/').filter(segment => segment)[1]);
+  // save database object by reference and create empty response
+  const savedComment = database.comments[id];
+  const response = {};
+  if(!id || !savedComment){
+    // check for id, and that the comment exists
+    response.status = 404;
+  } else {
+    // clear out the comment
+    database.comments[id] = null;
+    // find article where the comment existed and remove the id
+    const article = database.articles[savedComment.articleId];
+    const articleCommentIndex = article.commentIds.findIndex(comId => comId === id);
+    article.commentIds.splice(articleCommentIndex,1);
+    // find the author of comment and delete the id reference
+    // not sure this is a good way to find the author object, but it seems to work
+    const author = database.users[savedComment.username];
+    const authorCommentIndex = author.commentIds.findIndex(comId => comId === id);
+    author.commentIds.splice(authorCommentIndex,1);
+    response.status = 204;
+  }
+  return response;
+}
+
+function upvoteComment(url,request) {
+  const id = Number(url.split('/').filter(segment => segment)[1]);
+  const username = request.body && request.body.username;
+  let savedComment = database.comments[id];
+  const response = {};
+  // check for id, missing comment or username from database
+  if(!id || !database.comments[id] || !database.users[username]){
+    response.status = 400;
+  } else if(savedComment.downvotedBy[username]) {
+    // if there is a downvote, i find the index and delete the comment
+    // i prefer the ability to erase a trace of a vote rather than switch
+    // immediately to an up or downvote. instead this should require two clicks
+    const downvoteIndex = savedComment.downvotedBy.indexOf(username);
+    savedComment = savedComment.downvotedBy.splice(downvoteIndex,1);
+    response.body = {comment: savedComment};
+    response.status = 200;
+  } else {
+    // since everything else went well, it can now update the comment
+    // by reference and then build the successful response
+    savedComment = upvote(savedComment,username);
+    response.body = {comment: savedComment};
+    response.status = 200;
+  }
+  return response;
+}
+
+function downvoteComment(url,request) {
+  const id = Number(url.split('/').filter(segment => segment)[1]);
+  const username = request.body && request.body.username;
+  let savedComment = database.comments[id];
+  const response = {};
+
+  if(!id || !database.comments[id] || !database.users[username]){
+    response.status = 400;
+  } else if(savedComment.upvotedBy[username]) {
+    const upvoteIndex = savedComment.upvotedBy.indexOf(username);
+    savedComment = savedComment.upvotedBy.splice(upvoteIndex,1);
+    response.body = {comment: savedComment};
+    response.status = 200;
+  } else {
+    savedComment = downvote(savedComment,username);
+    response.body = {comment: savedComment};
+    response.status = 200;
+  }
+  return response;
+}
 
 
 // Write all code above this line.

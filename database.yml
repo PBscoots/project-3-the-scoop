@@ -1,0 +1,65 @@
+articles:
+  '1':
+    commentIds: []
+    downvotedBy:
+      - John
+      - James
+      - Jerk
+    id: 1
+    title: Random political garbage
+    upvotedBy:
+      - Jim
+      - Jones
+    url: 123abc
+    username: Jim
+  '2':
+    commentIds: []
+    downvotedBy:
+      - Jerk
+    id: 2
+    title: Puppies
+    upvotedBy:
+      - John
+      - Jim
+      - James
+      - Jones
+    url: cuteness
+    username: John
+  '3':
+    commentIds: []
+    downvotedBy:
+      - Jerk
+    id: 3
+    title: Why my life is better with candy
+    upvotedBy:
+      - James
+      - Jones
+    url: sugarlife
+    username: James
+comments: {}
+nextArticleId: 4
+nextCommentId: 1
+users:
+  James:
+    articleIds:
+      - 3
+    commentIds: []
+    username: James
+  Jerk:
+    articleIds: []
+    commentIds: []
+    username: Jerk
+  Jim:
+    articleIds:
+      - 1
+    commentIds: []
+    username: Jim
+  John:
+    articleIds:
+      - 2
+    commentIds: []
+    username: John
+  Jones:
+    articleIds: []
+    commentIds: []
+    username: Jones
